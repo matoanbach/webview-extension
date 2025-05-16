@@ -4,29 +4,33 @@ const regex = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
 
 // don’t even try to resolve these tokens
 const skippable = new Set<string>([
-  "if", "else", "for", "while", "return", "switch", "case",
-  "void", "int", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-  // Apple-SDK attributes and macros you don’t care about:
-  "__dead2",
-  "__cold",
-  "__disable_tail_calls",
-  "__pure2",
-  "__unused",
-  "__used",
-  "true",
-  "false",
-  "bool"
-  // …etc
+    "if", "else", "for", "while", "return", "switch", "case",
+    "void", "int", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+
+    // Apple-SDK attributes and macros you don’t care about:
+    "__dead2",
+    "__cold",
+    "__disable_tail_calls",
+    "__pure2",
+    "__unused",
+    "__used",
+
+
+    "true",
+    "false",
+    "bool"
+    // …etc
 ]);
 
 // only pick the symbol kinds that aren’t plain functions or compiler internals
 const pickable = new Set<vscode.SymbolKind>([
-  vscode.SymbolKind.Constructor,
-  vscode.SymbolKind.Constant,
-  vscode.SymbolKind.Struct,
-  vscode.SymbolKind.Enum,
-  vscode.SymbolKind.Class,
-  vscode.SymbolKind.Interface,
+    vscode.SymbolKind.Constructor,
+    vscode.SymbolKind.Constant,
+    vscode.SymbolKind.Struct,
+    vscode.SymbolKind.Enum,
+    vscode.SymbolKind.Class,
+    vscode.SymbolKind.Interface,
+    vscode.SymbolKind.Variable
 ]);
 
 
@@ -154,7 +158,7 @@ export async function goToDefinition(uri: vscode.Uri, position: vscode.Position,
     for (const location of locations) {
         const symbol = await getADocumentSymbol(location.uri, location.range)
         if (symbol) {
-            const key = `${symbol.name}@${location.uri}` 
+            const key = `${symbol.name}@${location.uri}`
             // const key = `${symbol.name}@${location.uri.toString()}:` + `${location.range.start.line}:${location.range.start.character}`
             if (visited.has(key)) continue
             visited.add(key)
@@ -172,13 +176,13 @@ export async function goToDefinition(uri: vscode.Uri, position: vscode.Position,
  * @param range The `vscode.Range` of the symbol
  * @returns A Promise resolves a list of `Symbol`
  */
-export async function getCalleSymbols(uri: vscode.Uri, range: vscode.Range): Promise<Symbol[]> {
+export async function getCalleSymbols(uri: vscode.Uri, documentItem: Symbol): Promise<Symbol[]> {
     const doc = await vscode.workspace.openTextDocument(uri)
     const visited = new Set<string>()
     const visitedTokens = new Set<string>()
 
     const results: Symbol[] = []
-    for (let line = range.start.line; line <= range.end.line; line++) {
+    for (let line = documentItem.range.start.line; line <= documentItem.range.end.line; line++) {
         const text = doc.lineAt(line).text
         regex.lastIndex = 0
 
@@ -193,10 +197,14 @@ export async function getCalleSymbols(uri: vscode.Uri, range: vscode.Range): Pro
             const position = new vscode.Position(line, match.index)
             const symbols = await goToDefinition(uri, position, visited)
             for (const symbol of symbols) {
-                if (pickable.has(symbol.kind)) results.push(symbol)
-                // console.log(`${token} -> ${symbol.name}`)
+                // if (documentItem.name === 'Zen4ReOrderLogicalCcdWithNumaDomainOrder(uint32_t, uint32_t, uint32_t, uint32_t *)') {
+                //     console.log(`  token="${token}" on line ${line} -> ${symbol.name}`);
+                //     console.log(symbol)
+                // }
+                if (pickable.has(symbol.kind) && (symbol.name.includes(token))) {
+                    results.push(symbol)
+                }
             }
-
         }
     }
     return results
@@ -226,65 +234,65 @@ export async function getCalleSymbols(uri: vscode.Uri, range: vscode.Range): Pro
  *          (Markdown or plain) concatenated, or an empty string if no docs are found.
  */
 export async function getSymbolDocumentation(
-  uri: vscode.Uri,
-  documentItem: vscode.DocumentSymbol
+    uri: vscode.Uri,
+    documentItem: vscode.DocumentSymbol
 ): Promise<string> {
-  const doc = await vscode.workspace.openTextDocument(uri);
-  const commentLines: string[] = [];
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const commentLines: string[] = [];
 
-  // start just above the symbol
-  let line = documentItem.range.start.line - 1;
-  if (line < 0) {
-    return '';
-  }
-
-  // skip over blank lines and preprocessor directives
-  while (line >= 0) {
-    const txt = doc.lineAt(line).text.trim();
-    if (txt === '' || txt.startsWith('#')) {
-      line--;
-      continue;
+    // start just above the symbol
+    let line = documentItem.range.start.line - 1;
+    if (line < 0) {
+        return '';
     }
-    break;
-  }
 
-  if (line < 0) {
-    return '';
-  }
-
-  const trimmed = doc.lineAt(line).text.trim();
-
-  // 1) JSDoc‐style block?
-  if (trimmed.endsWith('*/')) {
-    // grab the closing */
-    commentLines.unshift(doc.lineAt(line).text);
-    line--;
-    // walk until /** 
+    // skip over blank lines and preprocessor directives
     while (line >= 0) {
-      const text = doc.lineAt(line).text;
-      commentLines.unshift(text);
-      if (text.trim().startsWith('/**')) {
+        const txt = doc.lineAt(line).text.trim();
+        if (txt === '' || txt.startsWith('#')) {
+            line--;
+            continue;
+        }
         break;
-      }
-      line--;
     }
+
+    if (line < 0) {
+        return '';
+    }
+
+    const trimmed = doc.lineAt(line).text.trim();
+
+    // 1) JSDoc‐style block?
+    if (trimmed.endsWith('*/')) {
+        // grab the closing */
+        commentLines.unshift(doc.lineAt(line).text);
+        line--;
+        // walk until /** 
+        while (line >= 0) {
+            const text = doc.lineAt(line).text;
+            commentLines.unshift(text);
+            if (text.trim().startsWith('/**')) {
+                break;
+            }
+            line--;
+        }
+        return commentLines.join('\n');
+    }
+
+    // 2) line‐comment style?
+    while (line >= 0) {
+        const text = doc.lineAt(line).text;
+        const t = text.trim();
+        if (t.startsWith('//')) {
+            commentLines.unshift(text);
+            line--;
+            continue;
+        }
+        // stop on first non‐comment
+        break;
+    }
+
     return commentLines.join('\n');
-  }
-
-  // 2) line‐comment style?
-  while (line >= 0) {
-    const text = doc.lineAt(line).text;
-    const t = text.trim();
-    if (t.startsWith('//')) {
-      commentLines.unshift(text);
-      line--;
-      continue;
-    }
-    // stop on first non‐comment
-    break;
-  }
-
-  return commentLines.join('\n');
 }
 
 /**
@@ -369,7 +377,7 @@ export async function getOutgoingCalls(item: vscode.CallHierarchyItem): Promise<
 export async function buildCallTree(root: vscode.CallHierarchyItem, visited: Set<string>) {
     const id = `${root.name}@${root.uri.toString()}`;
     if (visited.has(id)) {
-        return // new Symbol
+        return // prevent a cycle a tree
     }
     visited.add(id)
 
@@ -392,6 +400,9 @@ export async function buildCallTree(root: vscode.CallHierarchyItem, visited: Set
             newSymbol.dependencies?.callTree.push(calleeSymbol)
         }
     }
+
+    // unmark the node, cuz we might want to see this node again in another branch
+    visited.delete(id)
     return newSymbol
 }
 
@@ -401,7 +412,7 @@ export async function buildCallTree(root: vscode.CallHierarchyItem, visited: Set
 export async function buildSymbol(hierarchySymbol: vscode.CallHierarchyItem): Promise<Symbol | undefined> {
     const documentSymbol = await getADocumentSymbol(hierarchySymbol.uri, hierarchySymbol.range)
     if (documentSymbol) {
-        const allSymbolsUsed = await getCalleSymbols(hierarchySymbol.uri, documentSymbol.range)
+        const allSymbolsUsed = await getCalleSymbols(hierarchySymbol.uri, documentSymbol)
         documentSymbol.dependencies = { callTree: allSymbolsUsed }
     }
     return documentSymbol
