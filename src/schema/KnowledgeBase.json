@@ -1,0 +1,52 @@
+[
+  {
+    "name": "", // symbol.name
+    "kind": 0, // vscode.SymbolKind (use the numeric enum)
+    "uri": "", // file URI
+    "documentation": "", // hover doc / JSDoc
+    "definition": "", // the single line or lines that declare the function
+    "implementation": "", // the entire function body (from signature → closing brace)
+    "range": { // the full range of the symbol
+      "start": {
+        "line": 0,
+        "character": 0
+      },
+      "end": {
+        "line": 0,
+        "character": 0
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 0,
+        "character": 0
+      },
+      "end": {
+        "line": 0,
+        "character": 0
+      }
+    },
+    "dependencies": {
+      "callTree": [ // mirrors CallHierarchyItem → CallHierarchyNode
+        {
+          "name": "",
+          "kind": 0,
+          "uri": "",
+          "signature": "",
+          "implementation": "",
+          "range": {
+            "start": {
+              "line": 0,
+              "character": 0
+            },
+            "end": {
+              "line": 0,
+              "character": 0
+            }
+          },
+          "children": [] // recursive
+        }
+      ]
+    }
+  }
+]

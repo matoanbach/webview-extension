@@ -1,0 +1,30 @@
+{
+	"compilerOptions": {
+		"module": "Node16",
+		"target": "ES2022",
+		"outDir": "out",
+		"lib": [
+			"ES2022"
+		],
+		"sourceMap": true,
+		"rootDir": "src",
+		"strict": true, /* enable all strict type-checking options */
+		/* Additional Checks */
+		// "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
+		// "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
+		// "noUnusedParameters": true,  /* Report errors on unused parameters. */
+	},
+	// Only compile code under your extension’s `src/`
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		"vscode.proposed.findTextInFiles"
+	],
+	// Ignore everything else (your React app lives in `web/`)
+	"exclude": [
+		"node_modules",
+		"web", // ← prevent TS from scanning your React folder
+		"web/**", // ← (optional) same as above
+		".next" // if you ever build Next.js there
+	]
+}
