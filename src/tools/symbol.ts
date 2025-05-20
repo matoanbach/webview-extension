@@ -3,22 +3,21 @@ import * as vscode from 'vscode'
 const regex = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
 
 // don’t even try to resolve these tokens
-const skippable = new Set<string>([
-    "if", "else", "for", "while", "return", "switch", "case",
-    "void", "int", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+const skippableWords = new Set<string>([
+    'if', 'else', 'for', 'while', 'return', 'switch', 'case',
+    'void', 'int', 'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t',
 
     // Apple-SDK attributes and macros you don’t care about:
-    "__dead2",
-    "__cold",
-    "__disable_tail_calls",
-    "__pure2",
-    "__unused",
-    "__used",
-
-
-    "true",
-    "false",
-    "bool"
+    '__dead2',
+    '__cold',
+    '__pure2',
+    '__unused',
+    '__used',
+    '__disable_tail_calls',
+    'uintptr_t',
+    'true',
+    'false',
+    'bool'
     // …etc
 ]);
 
@@ -115,7 +114,14 @@ export async function getDocumentSymbols(uri: vscode.Uri): Promise<Symbol[]> {
             const documentation = await getSymbolDocumentation(uri, ds)
             const implementation = await getSymbolImplementation(uri, ds)
             const definition = await getSymbolDefinition(uri, ds)
-            return new Symbol(ds.name, ds.kind, uri, documentation, definition, implementation, ds.range, ds.selectionRange, [])
+            let name = ""
+            if (ds.kind === vscode.SymbolKind.Function && ds.name.indexOf('(') !== -1) {
+                const index = ds.name.indexOf('(')
+                name = ds.name.slice(0, index).trim()
+            } else {
+                name = ds.name
+            }
+            return new Symbol(name, ds.kind, uri, documentation, definition, implementation, ds.range, ds.selectionRange, [])
         })
     )
     return wrapped
@@ -160,7 +166,9 @@ export async function goToDefinition(uri: vscode.Uri, position: vscode.Position,
         if (symbol) {
             const key = `${symbol.name}@${location.uri}`
             // const key = `${symbol.name}@${location.uri.toString()}:` + `${location.range.start.line}:${location.range.start.character}`
-            if (visited.has(key)) continue
+            if (visited.has(key) || symbol.uri.toLowerCase().includes("application")) {
+                continue
+            }
             visited.add(key)
             results.push(symbol)
         }
@@ -189,7 +197,7 @@ export async function getCalleSymbols(uri: vscode.Uri, documentItem: Symbol): Pr
         let match: RegExpExecArray | null
         while ((match = regex.exec(text)) !== null) {
             const token = match[0]
-            if (visitedTokens.has(token) || skippable.has(token)) {
+            if (visitedTokens.has(token) || skippableWords.has(token)) {
                 continue;
             }
             visitedTokens.add(token)
@@ -197,10 +205,6 @@ export async function getCalleSymbols(uri: vscode.Uri, documentItem: Symbol): Pr
             const position = new vscode.Position(line, match.index)
             const symbols = await goToDefinition(uri, position, visited)
             for (const symbol of symbols) {
-                // if (documentItem.name === 'Zen4ReOrderLogicalCcdWithNumaDomainOrder(uint32_t, uint32_t, uint32_t, uint32_t *)') {
-                //     console.log(`  token="${token}" on line ${line} -> ${symbol.name}`);
-                //     console.log(symbol)
-                // }
                 if (pickable.has(symbol.kind) && (symbol.name.includes(token))) {
                     results.push(symbol)
                 }
@@ -333,7 +337,16 @@ export async function getSymbolImplementation(uri: vscode.Uri, documentItem: vsc
  *          objects representing the entry points, or an empty array if none.
  */
 export async function prepareCallRoots(uri: vscode.Uri, position: vscode.Position): Promise<vscode.CallHierarchyItem[]> {
-    const roots = await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>('vscode.prepareCallHierarchy', uri, position)
+    const roots: vscode.CallHierarchyItem[] = []
+    const symbols = await getDocumentSymbols(uri)
+    for (const symbol of symbols) {
+        if (symbol.kind === vscode.SymbolKind.Function) {
+            const items = await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>('vscode.prepareCallHierarchy', uri, symbol.selectionRange.start)
+            for (const item of items) {
+                roots.push(item)
+            }
+        }
+    }
     return roots
 }
 
@@ -389,7 +402,6 @@ export async function buildCallTree(root: vscode.CallHierarchyItem, visited: Set
     for (const call of outgoing ?? []) {
         const callee = call.to;
         const calleeId = `${callee.name}@${callee.uri.toString()}`;
-
         if (visitedCalles.has(calleeId)) {
             continue
         }

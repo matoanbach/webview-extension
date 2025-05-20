@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 import * as tools from './tools/symbol'
+import { writeFileSync } from "fs";
+
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('This extension’s ID is:', context.extension.id);
@@ -40,20 +42,25 @@ export function activate(context: vscode.ExtensionContext) {
         );
 
         const roots = await tools.prepareCallRoots(vscode.Uri.parse(args.uri), new vscode.Position(args.position.line, args.position.character))
+        // console.log(roots)
 
         const tree: tools.Symbol[] = []
         for (const root of roots ?? []) {
           const branch = await tools.buildCallTree(root, new Set<string>())
           if (branch) tree.push(branch)
         }
-
+        
         // 3) Send the full forest to React
-        testSupportProvider.postMessage({
+        const message = {
           type: "callHierarchy",
           tree, // array of CallTreeNode
-        });
+        }
+        testSupportProvider.postMessage(message);
 
-        // console.log(await tools.getSymbolDocumentation(vscode.Uri.parse(args.uri), new vscode.Position(args.position.line, args.position.character)))
+        // 4) Save the tree to a json file
+        writeFileSync("/Users/tieuma/Documents/amd/Seneca/Research/NewUTAgent/KnowledgeBase.json", JSON.stringify(message), {
+          flag: "w"
+        })
       })
 
   );

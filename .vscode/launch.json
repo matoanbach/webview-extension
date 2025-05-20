@@ -11,7 +11,8 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"C:/OpenSIL/Seneca/AGESA/AmdOuiPkg/openSIL"
+				// "/Users/tieuma/Documents/amd/Seneca/AGESA/AmdOuiPkg/openSIL"
+				"/Users/tieuma/Documents/amd/Seneca/AGESA/AmdOuiPkg"
 			],
 			"outFiles": [
 				"${workspaceFolder}/out/**/*.js"
