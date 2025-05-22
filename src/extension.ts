@@ -58,9 +58,15 @@ export function activate(context: vscode.ExtensionContext) {
         testSupportProvider.postMessage(message);
 
         // 4) Save the tree to a json file
-        writeFileSync("/Users/tieuma/Documents/amd/Seneca/Research/NewUTAgent/KnowledgeBase.json", JSON.stringify(message), {
+        writeFileSync("C:/OpenSIL/webview/Agent/knowledge/KnowledgeBase.json", JSON.stringify(message), {
           flag: "w"
         })
+
+        // 5) Save the source file
+        const doc = vscode.workspace.openTextDocument(documentUri)
+        writeFileSync("C:/OpenSIL/webview/Agent/knowledge/sourcefile.c", (await doc).getText(), {
+          flag: "w"
+        }) 
       })
 
   );

@@ -17,8 +17,19 @@ const skippableWords = new Set<string>([
     'uintptr_t',
     'true',
     'false',
-    'bool'
+    'bool',
     // …etc
+
+    // WINDOW-SDK attributes and macros you don’t care about:
+    '_In_',
+    'wchar_t',
+    '_In_z_',
+    '_ACRTIMP',
+    '_wassert',
+    'NULL',
+    'size_t',
+    '_Out_writes_bytes_all_',
+    'assert'
 ]);
 
 // only pick the symbol kinds that aren’t plain functions or compiler internals
@@ -115,7 +126,7 @@ export async function getDocumentSymbols(uri: vscode.Uri): Promise<Symbol[]> {
             const implementation = await getSymbolImplementation(uri, ds)
             const definition = await getSymbolDefinition(uri, ds)
             let name = ""
-            if (ds.kind === vscode.SymbolKind.Function && ds.name.indexOf('(') !== -1) {
+            if (ds.name.indexOf('(') !== -1) {
                 const index = ds.name.indexOf('(')
                 name = ds.name.slice(0, index).trim()
             } else {
@@ -124,7 +135,14 @@ export async function getDocumentSymbols(uri: vscode.Uri): Promise<Symbol[]> {
             return new Symbol(name, ds.kind, uri, documentation, definition, implementation, ds.range, ds.selectionRange, [])
         })
     )
-    return wrapped
+
+    const result = []
+    for (const sym of wrapped) {
+        if (!skippableWords.has(sym.name)) {
+            result.push(sym)
+        }
+    }
+    return result
 }
 
 /**

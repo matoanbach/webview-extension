@@ -2,21 +2,31 @@ from dotenv import load_dotenv
 _ = load_dotenv()
 
 import operator
-from typing import TypedDict, Annotated, List, Dict, Any, Optional, Union
+from typing import TypedDict, Annotated, Dict, Any
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import AnyMessage, SystemMessage, HumanMessage, ToolMessage
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_openai import ChatOpenAI
 from langchain_core.tools import Tool
 
-from Tools import ToolTerminate
-from Tools import ToolGetSourceFile
-from Tools import ToolGetTestTemplate
-from Tools import ToolGetDetailForOne
-from Tools import ToolGetDependency
-
-from Tools import GetInitialPrompt
 from Data import InitData
+
+import tiktoken
+
+def count_tokens(messages, model="gpt-4o"):
+    try:
+        enc = tiktoken.encoding_for_model(model)
+    except KeyError:
+        enc = tiktoken.get_encoding("cl100k_base")
+
+    total = 0
+    for msg in messages:
+        if hasattr(msg, "content"):
+            text = msg.content
+        else:
+            text = str(msg)
+
+        total += len(enc.encode(text))
+    return total
 
 def pretty_print_messages(messages):
     for msg in messages:
@@ -38,6 +48,7 @@ def pretty_print_messages(messages):
 
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
+    # messages: list[AnyMessage]
     scratchpad: Annotated[list[str], operator.add]
     actions_taken: Annotated[list[str], operator.add]
 
@@ -64,29 +75,6 @@ class Agent:
         result = state['messages'][-1]
         return hasattr(result, 'tool_calls') and result.tool_calls is not None and len(result.tool_calls) > 0
 
-    # def call_openai(self, state: AgentState) -> Dict[str, Any]:
-    #     messages = state['messages']
-    #     # if self.system:
-    #     #     messages = [SystemMessage(content=self.system.data.system_prompt)] + messages
-
-        
-    #     # checks if the latest message involves tool calls or not
-    #     last_message = messages[-1] if messages else None
-    #     if last_message and hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-
-    #         # adds tool attributes to the tool message which will be appended to the agent state
-    #         for tool_call in last_message.tool_calls:
-    #             tool_call_id = tool_call['id']
-    #             tool_name = tool_call['name']
-    #             state['messages'].append(ToolMessage(
-    #                 tool_call_id=tool_call_id,
-    #                 name=tool_name,
-    #                 content=f"Tool {tool_name} was called with ID {tool_call_id}"
-    #             ))
-
-    #     # invokes the return of updated agent state
-    #     message = self.model.invoke(state['messages'])
-    #     return { 'messages': state['messages'] + [message] }
     def call_openai(self, state: AgentState) -> Dict[str, Any]:
         old_messages = state['messages']
         new_messages = list(old_messages)  # start with everything so far
@@ -108,7 +96,8 @@ class Agent:
         response = self.model.invoke(old_messages)
         new_messages.append(response)
 
-        return {'messages': new_messages}
+        print(f"\ncall_openai() - [LOG INFO] - Messages contain {count_tokens(new_messages, self.system.data.model)} tokens\n")
+        return {'messages': [response]}
 
     def give_reason(self, state: AgentState) -> Dict[str, Any]:
         last_msg = state['messages'][-1]
@@ -188,7 +177,12 @@ class Agent:
 
                 content = str(result)
                 actions_taken.append(tool_name)
-                print(f"\n✅ Tool '{tool_name}' returned: \n{content}\n\n")
+
+                # print detail what tool returns
+                # print(f"\n✅ Tool '{tool_name}' returned: \n{content}\n\n")
+
+                # print tokens used by tools
+                print(f"\ntake_action() - [LOG INFO] - Tool '{tool_name}' used tokens_count: {count_tokens([content], self.system.data.model)}\n\n")
 
                 tool_message = ToolMessage(
                     tool_call_id=tool_id,
@@ -207,44 +201,10 @@ class Agent:
                 )
                 state['messages'].append(tool_message)  # exception state reached -> raised during tooling
 
+        print(f"\ntake_action() - [LOG INFO] - Messages contain {count_tokens(state["messages"], self.system.data.model)} tokens\n")
         # returns the action taken to the main routine
         return {
             "messages": state['messages'],
             "actions_taken": actions_taken,
             "__end__": False
         }
-
-json_path = '/Users/tieuma/Documents/amd/Seneca/Research/NewUTAgent/KnowledgeBase.json'
-initData = InitData(json_path=json_path)
-tool_get_source_file = ToolGetSourceFile( initData.data )
-tool_get_test_template = ToolGetTestTemplate( initData.data )
-tool_get_detail_for_one = ToolGetDetailForOne( initData.data )
-tool_get_dependency = ToolGetDependency(initData.data)
-tool_terminate = ToolTerminate(initData.data)
-
-tools = [tool_get_source_file, tool_get_test_template, tool_get_detail_for_one, tool_get_dependency, tool_terminate]
-
-ReActAgent = Agent(
-    model=ChatOpenAI(model="gpt-4.1-mini", temperature=0), 
-    tools=tools,
-    system=initData
-)
-
-for i in range(1):
-    choice = input("What function to test: ")
-    UTOneMessage = HumanMessage(content=GetInitialPrompt(choice))
-
-    UTOneInitialState = {
-        "messages": [
-            SystemMessage(content=initData.data.system_prompt),
-            UTOneMessage
-        ],
-        "scratchpad": [],
-    }
-
-    UTOneFinalState = ReActAgent.graph.invoke(
-        UTOneInitialState,
-        config={"recursion_limit": 100}
-    )
-
-    pretty_print_messages(UTOneFinalState["messages"])
