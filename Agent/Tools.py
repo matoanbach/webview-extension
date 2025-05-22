@@ -34,17 +34,28 @@ def ToolGetDetailForOne(data: Data):
         return GetDetailForOne(data, symbol_name)
     return GET_DETAIL_FOR_ONE
 
+# One tool to provide dependencies for the function under test
+def ToolGetFunctionUTDependency(data: Data):
+    @tool
+    def GET_FUNCTION_UT_DEPENDENCY():
+        """
+        List the direct dependencies (functions, types, macros) used inside the
+        function under test in the source file under test, for use in generating
+        necessary mocks/stubs/fakes.
+        """
+        return GetFunctionUTDependency(data)    # <-- call the correct helper
+    return GET_FUNCTION_UT_DEPENDENCY
+
 # One tool to provide direct dependencies that need to be mocked 
 #       (to resolve external symbols and compiler linking issue)
-def ToolGetDependency(data: Data):
+def ToolGetSiblingDependency(data: Data):
     @tool
-    def GET_DEPENDENCY():
+    def GET_SIBLING_DEPENDENCY():
         """
-        List the direct dependencies (functions, types, macros) for all declared functions in the source file under test, 
-        for use in generating necessary stubs or mocks.
+        List the sub-calls inside sibling functions in the source file under test, for use in generating necessary stubs or mocks to resolve external symbols and linking issues.
         """
-        return GetDependency(data)
-    return GET_DEPENDENCY
+        return GetSiblingDependency(data)
+    return GET_SIBLING_DEPENDENCY
 
 def ToolTerminate(data: Data):
     @tool
@@ -77,41 +88,84 @@ def GetDetailForOne(data: Data, symbol_name: str):
     if symbol_name not in data.symbol_map:
         output.append(f'# DETAIL FOR {symbol_name} not found')
     else:
-        sym = data.symbol_map.get(symbol_name)
+        symbol = data.symbol_map.get(symbol_name)
         output.append(f'# DETAIL FOR {symbol_name}')
-        output.append(f"## Documentation\n{sym.documentation}")
-        output.append(f"## Implementation\n{sym.implementation}")
+        output.append(f'## Kind: {SYMBOL_KIND_MAP.get(int(symbol.kind))}') 
+        output.append(f"## Documentation\n{symbol.documentation}")
+        output.append(f"## Implementation\n{symbol.implementation}")
         
     return "\n\n".join(output)
-
-def GetDependency(data: Data):
+def GetFunctionUTDependency(data: Data):
+    if data.function_ut not in data.symbol_map:
+        return
+    
     output = []
     for root in data.call_hierarchy.tree:
-        output.append(f'# DIRECT DEPENDENCIES FOR FUNCTION {root.name}:')
-        for symbol in root.dependencies.callTree:
-            output.append(f'## SYMBOL NAME: `{symbol.name}`')
-            output.append(f'### KIND: {SYMBOL_KIND_MAP.get(int(symbol.kind))}')
-            output.append(f'### DOCUMENTATION: ')
-            output.append(symbol.raw_to_block(symbol.documentation))
-            output.append(f'### IMPLEMENTATION: ')
-            output.append(symbol.raw_to_block(symbol.implementation))
+        if data.function_ut == root.name:
+            output.append(f"# SUB-CALLS AND SYMBOLS USED INSIDE FUNCTION UNDER TEST {root.name}") 
+            for symbol in root.dependencies.callTree:
+                output.append(f'## SYMBOL NAME: `{symbol.name}`')
+                output.append(f'### KIND: {SYMBOL_KIND_MAP.get(int(symbol.kind))}')
+                output.append(f'### DOCUMENTATION: ')
+                output.append(symbol.raw_to_block(symbol.documentation))
+                output.append(f'### IMPLEMENTATION: ')
+                output.append(symbol.raw_to_block(symbol.implementation))
     return "\n\n".join(output)
 
-def GetInitialPrompt(choice: str):
+def GetSiblingDependency(data: Data):
+    # output = []
+    # for root in data.call_hierarchy.tree:
+    #     output.append(f'# SUB-CALLS INSIDE **SIBLING** FUNCTION {root.name}:')
+    #     if not root.dependencies.callTree:
+    #         output.append("None")
+    #         continue
+    #     for symbol in root.dependencies.callTree:
+    #         if SYMBOL_KIND_MAP.get(int(symbol.kind)) == "Function":
+    #             output.append(f'## SYMBOL NAME: `{symbol.name}`')
+    #             output.append(f'### KIND: {SYMBOL_KIND_MAP.get(int(symbol.kind))}')
+    #             output.append(f'### DOCUMENTATION: ')
+    #             output.append(symbol.raw_to_block(symbol.documentation))
+    #             output.append(f'### IMPLEMENTATION: ')
+    #             output.append(symbol.raw_to_block(symbol.implementation))
+    # return "\n\n".join(output)
+    output = []
+    output.append(f'# SUB-CALLS INSIDE **SIBLING** FUNCTION:')
+    for root in data.call_hierarchy.tree:
+        if not root.dependencies.callTree:
+            output.append("None")
+            continue
+        for symbol in root.dependencies.callTree:
+            if SYMBOL_KIND_MAP.get(int(symbol.kind)) == "Function":
+                output.append(f'## Function signature: \n{symbol.raw_to_block(symbol.definition)}')
+                # output.append(f'## Function uses below symbols: ')
+                # for sym in root.dependencies.callTree:
+                #     if SYMBOL_KIND_MAP.get(int(symbol.kind)) != "Function":
+                #         output.append(f'### IMPLEMENTATION: ')
+                #         output.append(symbol.raw_to_block(sym.implementation))
+    return "\n\n".join(output)
+
+def GetInitialPrompt(data: Data):
     return f"""
-    Generate a complete unit test for the {choice} function.
+    Generate a complete unit test for the {data.function_ut} function.
     Your output must include:
     - Unit test header file (.h)
     - Unit test source file (.c)
     - Any necessary mocks or stubs
-    - Prevent compiler linking issues by create Mock/Stub/Fake dependencies especially any sub-functions called by functiosn declared in the source file
+    - Mock/Stub/Fake dependencies especially any sub-functions called by functiosn declared in the source file to prevent compiler linking issues
 
     Respond only with code blocks.
     """
 
 
-# initData = InitData('KnowledgeBase.json')
-# print(GetSourceFile(initData.data))
-# print(GetTestTemplate(initData.data))
-# print(GetDetailForOne(initData.data, 'RcMgrSetInputBlkPhx(SIL_CONTEXT *)'))
-# print(GetDependency(initData.data))
+# json_path = 'C:/OpenSIL/webview/Agent/knowledge/KnowledgeBase.json'
+# source_file_path = 'C:/OpenSIL/webview/Agent/knowledge/sourcefile.c'
+# prompt_path = 'C:/OpenSIL/webview/Agent/knowledge/prompt.md'
+# ut_c_template_path = 'C:/OpenSIL/webview/Agent/template/template.c'
+# ut_h_template_path = 'C:/OpenSIL/webview/Agent/template/template.h'
+# # model = "gpt-4o-mini"
+# model = "gpt-4.1-mini"
+# # model = "o4-mini"
+# initData = InitData(model=model, function_ut="NbioBaseInitPhx", json_path=json_path, source_file_path=source_file_path, prompt_path=prompt_path, ut_c_template_path=ut_c_template_path, ut_h_template_path=ut_h_template_path)
+
+# print(GetFunctionUTDependency(initData.data))
+# print(GetSiblingDependency(initData.data))
